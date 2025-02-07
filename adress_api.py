@@ -1,12 +1,15 @@
 import openrouteservice
 import numpy as np
-
+import os
+from dotenv import load_dotenv
 
 class adressapi:
 
 
     def __init__(self):
-        self.API_KEY="5b3ce3597851110001cf6248e48bd717197c4deea061c04050f8a41b"
+        # Load variables from .env file
+        load_dotenv()
+        self.API_KEY=os.getenv("API_KEY")
         self.client = openrouteservice.Client(key=self.API_KEY)
         self.locations= []
 

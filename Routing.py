@@ -94,11 +94,15 @@ class RouteOptimizer:
     def generate_matrices_from_api(self):
         self.get_coordinates()
         all_locations = [depot.coordinates for depot in self.depots] + [res.coordinates for res in self.reservations]
+        print(all_locations)
         self.time_matrix= np.ceil(np.array(self.api.get_travel_times(all_locations))/60).astype(int)
         print(self.time_matrix)
 
 
     def create_data_model(self):
+        
+
+
         """
         Creates the data model for the routing problem.
         """
@@ -127,13 +131,37 @@ class RouteOptimizer:
 
         }
 
+    def get_recommendation(self):
+        #temporary 
+        coord=[[4.348591, 50.865544], [4.566716, 51.13374], [4.402453, 51.246664], [4.710309, 50.881011], [3.732703, 51.057496], [5.482751, 50.969549],
+         [5.334128, 50.935484], [4.371755, 50.843183], [3.275675, 50.837035], [4.398169, 51.918494], [5.554438, 50.635755], [3.217718, 51.208664], 
+         [2.924749, 51.220182], [4.471338, 51.025018]]
+        for c in range(len(self.depots)):
+            self.reservations[c]=coord[c]
+        for c in range(1,len(coord)):
+            self.reservations[c-len(self.depots)]=coord[c]
+
+
+        target_node=0
+        self.generate_matrices_from_api()
+        #optimizer.generate_pseudo_matrix()
+        data = self.create_data_model()
+        self.initialize_routing(data)
+        # Get the time dimension
+        time_dimension = self.routing.GetDimensionOrDie("Time")
+        index = self.manager.NodeToIndex(target_node)
+        # Get the cumulative time variable at the node
+        time_var = time_dimension.CumulVar(index)
+        # Get the latest possible arrival time at this node
+        max_time = self.solution.Max(time_var)
+
+
     def initialize_routing(self, data):
         """
         Initializes the routing model with constraints.
         """
         try:
             print("Initializing routing...")
-
             # Create the RoutingIndexManager
             manager = pywrapcp.RoutingIndexManager(len(data['time_matrix']),
                                                         data['num_vehicles'],
