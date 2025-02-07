@@ -137,9 +137,9 @@ class RouteOptimizer:
          [5.334128, 50.935484], [4.371755, 50.843183], [3.275675, 50.837035], [4.398169, 51.918494], [5.554438, 50.635755], [3.217718, 51.208664], 
          [2.924749, 51.220182], [4.471338, 51.025018]]
         for c in range(len(self.depots)):
-            self.reservations[c]=coord[c]
+            self.reservations[c].coordinates=coord[c]
         for c in range(1,len(coord)):
-            self.reservations[c-len(self.depots)]=coord[c]
+            self.reservations[c-len(self.depots)].coordinates=coord[c]
 
 
         target_node=0
@@ -214,7 +214,6 @@ class RouteOptimizer:
                 time_dimension.CumulVar(index).SetRange(
                     data["time_windows"][depot_idx][0], data["time_windows"][depot_idx][1]
                 )
-
             print("Time window constraints added for vehicles.")
 
 
@@ -224,6 +223,8 @@ class RouteOptimizer:
                 )
                 routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(routing.End(i)))
             
+
+
             penalty = 100000000
             for node in range(1, len(data["time_windows"])):
                 routing.AddDisjunction([manager.NodeToIndex(node)], penalty)
