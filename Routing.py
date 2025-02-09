@@ -11,7 +11,7 @@ from adress_api import adressapi
 import pdb;
 import numpy as np
 
-early_start =480
+
 
 class Depot:
     """
@@ -32,8 +32,7 @@ class Van:
         self.depot = depot
         self.emissions_per_km = emissions_per_km
         self.fuel_consumption_per_km = fuel_consumption_per_km
-        self.start_time = start_time - early_start
-        self.return_deadline = return_deadline- early_start
+
 
 
 class Reservation:
@@ -44,7 +43,7 @@ class Reservation:
         self.id = id
         self.adress = adress
         self.stop_duration = stop_duration
-        self.time_window = (time_window[0]-early_start,time_window[1]-early_start) or (0, 1440)  # Default: Full day
+        self.time_window = (time_window[0],time_window[1]) or (0, 1440)  # Default: Full day
         self.priority = priority
         self.coordinates=coordinates 
 
@@ -61,16 +60,18 @@ class RouteOptimizer:
         self.depots = depots
         self.distance_matrix = None
         self.time_matrix = None
+        self.stop_durations =None
         self.manager = None
         self.routing = None
         self.solution = None
+        self.depot=0
+        self.start_hour=480
         self.api=adressapi()
 
     def generate_pseudo_matrix(self):
 
         all_locations = [depot.adress for depot in self.depots] + [res.adress for res in self.reservations]
         num_locations = len(all_locations)
-        print(num_locations)
 
         self.distance_matrix = [[abs(i - j) * 7 for j in range(num_locations)] for i in range(num_locations)]
         self.time_matrix = [[abs(i - j) * 10 for j in range(num_locations)] for i in range(num_locations)]
@@ -78,13 +79,13 @@ class RouteOptimizer:
     def get_coordinates(self):
 
         for res in self.depots:
-                    if res.coordinates==None:
-                        res.coordinates=self.api.get_coordinates(res.adress)
-                        if not res.coordinates:
-                            print(f"Could not geocode: {res.adress}")
+            if res.coordinates is None:
+                res.coordinates=self.api.get_coordinates(res.adress)
+                if not res.coordinates:
+                    print(f"Could not geocode: {res.adress}")
 
         for res in self.reservations:
-            if res.coordinates==None:
+            if res.coordinates is None:
                 res.coordinates=self.api.get_coordinates(res.adress)
                 if not res.coordinates:
                     print(f"Could not geocode: {res.adress}")
@@ -94,15 +95,12 @@ class RouteOptimizer:
     def generate_matrices_from_api(self):
         self.get_coordinates()
         all_locations = [depot.coordinates for depot in self.depots] + [res.coordinates for res in self.reservations]
-        print(all_locations)
+        #print(all_locations)
         self.time_matrix= np.ceil(np.array(self.api.get_travel_times(all_locations))/60).astype(int)
-        print(self.time_matrix)
+        #print(self.time_matrix)
 
 
     def create_data_model(self):
-        
-
-
         """
         Creates the data model for the routing problem.
         """
@@ -113,25 +111,17 @@ class RouteOptimizer:
         # Add depot time windows
         # for van in self.vans:
         #     time_windows.append((480, 1080))
-        time_windows.append(((480-early_start), (1080-early_start)))
+        time_windows.append(((480-self.start_hour), (1080-self.start_hour)))
         # Add reservation time windows and stop durations
         for res in self.reservations:
-            time_windows.append((res.time_window[0],res.time_window[1]))
+            time_windows.append((res.time_window[0]-self.start_hour,res.time_window[1]-self.start_hour))
             stop_durations.append(res.stop_duration)
+        self.stop_durations=stop_durations
+        self.time_windows=time_windows
+        #print(time_windows)
+        #print(self.time_matrix)
 
-        print(time_windows)
-        print(self.time_matrix)
-        return {
-            'distance_matrix': self.distance_matrix,
-            'time_matrix': self.time_matrix,
-            'time_windows': time_windows,
-            'stop_durations': stop_durations,
-            'num_vehicles': len(self.vans),
-            'depots': 0,
-
-        }
-
-    def get_recommendation(self):
+    def get_recommendation(self,new_reservation):
         #temporary 
         coord=[[4.348591, 50.865544], [4.566716, 51.13374], [4.402453, 51.246664], [4.710309, 50.881011], [3.732703, 51.057496], [5.482751, 50.969549],
          [5.334128, 50.935484], [4.371755, 50.843183], [3.275675, 50.837035], [4.398169, 51.918494], [5.554438, 50.635755], [3.217718, 51.208664], 
@@ -141,12 +131,18 @@ class RouteOptimizer:
         for c in range(1,len(coord)):
             self.reservations[c-len(self.depots)].coordinates=coord[c]
 
+        self.reservations.append(new_reservation)
+        target_node=len(self.reservations)+len(self.depots)-1
 
-        target_node=0
+        """
+        Model execution for a new reservation.
+        """
         self.generate_matrices_from_api()
         #optimizer.generate_pseudo_matrix()
-        data = self.create_data_model()
-        self.initialize_routing(data)
+        self.create_data_model()
+        self.initialize_routing()
+        self.solve()
+
         # Get the time dimension
         time_dimension = self.routing.GetDimensionOrDie("Time")
         index = self.manager.NodeToIndex(target_node)
@@ -154,18 +150,21 @@ class RouteOptimizer:
         time_var = time_dimension.CumulVar(index)
         # Get the latest possible arrival time at this node
         max_time = self.solution.Max(time_var)
+        print(f"Latest possible arrival time at node {target_node}: {self.minutes_to_time_full(max_time-new_reservation.stop_duration)}")
+        return max_time
 
 
-    def initialize_routing(self, data):
+
+    def initialize_routing(self):
         """
         Initializes the routing model with constraints.
         """
         try:
             print("Initializing routing...")
             # Create the RoutingIndexManager
-            manager = pywrapcp.RoutingIndexManager(len(data['time_matrix']),
-                                                        data['num_vehicles'],
-                                                        data["depots"],)
+            manager = pywrapcp.RoutingIndexManager(len(self.time_matrix),
+                                                        len(self.vans),
+                                                        self.depot,)
             routing = pywrapcp.RoutingModel(manager)
             self.manager=manager
             def time_callback(from_index, to_index):
@@ -173,7 +172,7 @@ class RouteOptimizer:
                 # Convert from routing variable Index to time matrix NodeIndex.
                 from_node = manager.IndexToNode(from_index)
                 to_node = manager.IndexToNode(to_index)
-                return data["time_matrix"][from_node][to_node]+data["stop_durations"][to_node]
+                return self.time_matrix[from_node][to_node]+self.stop_durations[to_node]
 
             transit_callback_index = routing.RegisterTransitCallback(time_callback)
             # [END transit_callback]
@@ -189,7 +188,7 @@ class RouteOptimizer:
             time = "Time"
             routing.AddDimension(
                 transit_callback_index,
-                6000,  # allow waiting time
+                190,  # allow waiting time
                 100000000,  # maximum time per vehicle
                 False,  # Don't force start cumul to zero.
                 time,
@@ -199,8 +198,8 @@ class RouteOptimizer:
 
 
             # Add time window constraints for each location except depot.
-            for location_idx, time_window in enumerate(data["time_windows"]):
-                if location_idx == data["depots"]:
+            for location_idx, time_window in enumerate(self.time_windows):
+                if location_idx == self.depot:
                     continue
                 index = manager.NodeToIndex(location_idx)
                 time_dimension.CumulVar(index).SetRange(int(time_window[0]), int(time_window[1]))
@@ -209,15 +208,15 @@ class RouteOptimizer:
 
             # Add time window constraints for each vehicle start node.
             depot_idx =0
-            for vehicle_id in range(data["num_vehicles"]):
+            for vehicle_id in range(len(self.vans)):
                 index = routing.Start(vehicle_id)
                 time_dimension.CumulVar(index).SetRange(
-                    data["time_windows"][depot_idx][0], data["time_windows"][depot_idx][1]
+                    self.time_windows[depot_idx][0], self.time_windows[depot_idx][1]
                 )
             print("Time window constraints added for vehicles.")
 
 
-            for i in range(data["num_vehicles"]):
+            for i in range(len(self.vans)):
                 routing.AddVariableMinimizedByFinalizer(
                     time_dimension.CumulVar(routing.Start(i))
                 )
@@ -225,11 +224,11 @@ class RouteOptimizer:
             
 
 
-            penalty = 100000000
-            for node in range(1, len(data["time_windows"])):
-                routing.AddDisjunction([manager.NodeToIndex(node)], penalty)
+            # penalty = 100000000
+            # for node in range(1, len(self.time_windows)):
+            #     routing.AddDisjunction([manager.NodeToIndex(node)], penalty)
 
-            print("Disjunctions added.")
+            # print("Disjunctions added.")
 
             self.routing=routing
 
@@ -243,9 +242,9 @@ class RouteOptimizer:
         try:
             if search_parameters is None:
                 search_parameters = pywrapcp.DefaultRoutingSearchParameters()
-                search_parameters.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.AUTOMATIC
-                #search_parameters.local_search_metaheuristic = routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
-                #search_parameters.time_limit.seconds = 5
+                search_parameters.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
+                search_parameters.local_search_metaheuristic = routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
+                search_parameters.time_limit.seconds = 60
 
             self.solution = self.routing.SolveWithParameters(search_parameters)
             return self.solution is not None
@@ -279,48 +278,48 @@ class RouteOptimizer:
         }
 
 
-def minutes_to_time_full(minutes):
-    minutes=minutes+early_start
-    hours = minutes // 60
-    mins = minutes % 60
-    return f"{int(hours):02d}:{int(mins):02d}"
+    def minutes_to_time_full(self,minutes):
+        minutes=minutes+self.start_hour
+        hours = minutes // 60
+        mins = minutes % 60
+        return f"{int(hours):02d}:{int(mins):02d}"
 
-# [START solution_printer]
-def print_solution(data, manager, routing, solution):
-    """Prints solution on console."""
-    print(f"Objective: {solution.ObjectiveValue()}")
-        # Display dropped nodes.
-    dropped_nodes = "Dropped nodes:"
-    for node in range(routing.Size()):
-        if routing.IsStart(node) or routing.IsEnd(node):
-            continue
-        if solution.Value(routing.NextVar(node)) == node:
-            dropped_nodes += f" {manager.IndexToNode(node)}"
-    print(dropped_nodes)
-    time_dimension = routing.GetDimensionOrDie("Time")
-    total_time = 0
-    for vehicle_id in range(data["num_vehicles"]):
-        index = routing.Start(vehicle_id)
-        plan_output = f"Route for vehicle {vehicle_id}:\n"
-        while not routing.IsEnd(index):
+    # [START solution_printer]
+    def print_solution(self):
+        """Prints solution on console."""
+        print(f"Objective: {self.solution.ObjectiveValue()}")
+            # Display dropped nodes.
+        dropped_nodes = "Dropped nodes:"
+        for node in range(self.routing.Size()):
+            if self.routing.IsStart(node) or self.routing.IsEnd(node):
+                continue
+            if self.solution.Value(self.routing.NextVar(node)) == node:
+                dropped_nodes += f" {self.manager.IndexToNode(node)}"
+        print(dropped_nodes)
+        time_dimension = self.routing.GetDimensionOrDie("Time")
+        total_time = 0
+        for vehicle_id in range(len(self.vans)):
+            index = self.routing.Start(vehicle_id)
+            plan_output = f"Route for vehicle {vehicle_id}:\n"
+            while not self.routing.IsEnd(index):
+                time_var = time_dimension.CumulVar(index)
+        
+                plan_output += (
+                    f"{self.manager.IndexToNode(index)}"
+                    f" Time({self.minutes_to_time_full((self.solution.Max(time_var)-self.stop_durations[self.manager.IndexToNode(index)]))},{self.minutes_to_time_full((self.solution.Max(time_var)))})"
+                    " -> "
+                )
+                index = self.solution.Value(self.routing.NextVar(index))
             time_var = time_dimension.CumulVar(index)
-    
             plan_output += (
-                f"{manager.IndexToNode(index)}"
-                f" Time({minutes_to_time_full((solution.Max(time_var)-data['stop_durations'][manager.IndexToNode(index)]))},{minutes_to_time_full((solution.Max(time_var)))})"
-                " -> "
+                f"{self.manager.IndexToNode(index)}"
+                f" Time({self.minutes_to_time_full((self.solution.Max(time_var)-self.stop_durations[self.manager.IndexToNode(index)]))},{self.minutes_to_time_full((self.solution.Max(time_var)))})\n"
             )
-            index = solution.Value(routing.NextVar(index))
-        time_var = time_dimension.CumulVar(index)
-        plan_output += (
-            f"{manager.IndexToNode(index)}"
-            f" Time({minutes_to_time_full((solution.Max(time_var)-data['stop_durations'][manager.IndexToNode(index)]))},{minutes_to_time_full((solution.Max(time_var)))})\n"
-        )
-        plan_output += f"Time of the route: {solution.Max(time_var)}min\n"
-        print(plan_output)
-        total_time += solution.Min(time_var)
-    print(f"Total time of all routes: {total_time}min")
-    # [END solution_printer]
+            plan_output += f"Time of the route: {self.solution.Max(time_var)}min\n"
+            print(plan_output)
+            total_time += self.solution.Min(time_var)
+        print(f"Total time of all routes: {total_time}min")
+        # [END solution_printer]
 
 
 # Example Usage
@@ -330,7 +329,8 @@ def main():
         Van(id=0, depot=depots[0], emissions_per_km=90, fuel_consumption_per_km=0.1, start_time=480, return_deadline=1080),
         Van(id=1, depot=depots[0], emissions_per_km=200, fuel_consumption_per_km=0.2, start_time=480, return_deadline=750),
         Van(id=2, depot=depots[0], emissions_per_km=200, fuel_consumption_per_km=0.2, start_time=480, return_deadline=1080),
-        #Van(id=3, depot=depots[1], emissions_per_km=200, fuel_consumption_per_km=0.2, start_time=480, return_deadline=1080),
+        Van(id=3, depot=depots[0], emissions_per_km=200, fuel_consumption_per_km=0.2, start_time=480, return_deadline=1080),
+        Van(id=4, depot=depots[0], emissions_per_km=200, fuel_consumption_per_km=0.2, start_time=480, return_deadline=1080),
     ]
 
     reservations = [
@@ -344,9 +344,9 @@ def main():
         Reservation(id=8, adress="kortrijk , grotemarkt , belgium", stop_duration=20, time_window=(550, 580)),
         Reservation(id=9, adress="Namen, grotemarkt , belgium", stop_duration=25, time_window=(900, 1080)),
         Reservation(id=10, adress="Luik , grotemarkt , belgium", stop_duration=50, time_window=(480, 600)),
-        Reservation(id=11, adress="brugge , grotemarkt , belgium", stop_duration=20, time_window=(540, 660)),
+        Reservation(id=11, adress="brugge , grtemarkt , belgium", stop_duration=20, time_window=(540, 660)),
         Reservation(id=12, adress="oostende , grotemarkt , belgium", stop_duration=10, time_window=(600, 720)),
-        Reservation(id=13, adress="mechelen , grotemarkt , belgium", stop_duration=15, time_window=(480, 900)),
+        Reservation(id=13, adress="mechelen , grotemarkt , belgica", stop_duration=15, time_window=(480, 900)),
 
     ]
 
@@ -354,17 +354,16 @@ def main():
     
     optimizer.generate_matrices_from_api()
     #optimizer.generate_pseudo_matrix()
-    data = optimizer.create_data_model()
-    optimizer.initialize_routing(data)
-
-
-
+    optimizer.create_data_model()
+    optimizer.initialize_routing()
     if optimizer.solve():
-        print_solution(data, optimizer.manager, optimizer.routing, optimizer.solution)
+        optimizer.print_solution()
         #print("Metrics:", optimizer.calculate_metrics())
     else:
-
         print("No solution found.")
+    
+    optimizer.get_recommendation(Reservation(id=14, adress="Halle , grotemarkt , belgium", stop_duration=15, time_window=(480, 1400)))
+    optimizer.print_solution()
 
 
 if __name__ == "__main__":
