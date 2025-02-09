@@ -10,4 +10,6 @@ df["START UUR "] = pd.to_datetime(df["START UUR "], format="%H:%M").dt.time
 df_sorted = df.sort_values(by=["Submission Date", "START UUR "], ascending=[True, True])
 
 df.head(100).to_csv("output.csv", index=False)
+
+
 print(df.head(100))
