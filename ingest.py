@@ -85,7 +85,5 @@ def load_and_process_dataframe(file_path):
 
     # Add stop_time column
     df_sorted['stop_time'] = df_sorted.apply(get_stop_time, axis=1)
-    get_address_stop_time(df_sorted, 18)
-
     return get_address_stop_time(df_sorted, 18)
 
