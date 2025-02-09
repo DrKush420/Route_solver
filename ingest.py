@@ -63,7 +63,7 @@ def get_stop_time(row):
 
 def get_address_stop_time(df, x):
     # Select the first 'x' rows from the DataFrame with relevant columns
-    result = df[['LOCATIE', 'stop_time']].head(x)
+    result = df[['LOCATIE', 'stop_time']].dropna(subset=['stop_time']).head(x)
 
     # Convert the selected rows into a list of tuples
     address_stop_time_tuples = list(result.itertuples(index=False, name=None))
@@ -86,4 +86,6 @@ def load_and_process_dataframe(file_path):
     # Add stop_time column
     df_sorted['stop_time'] = df_sorted.apply(get_stop_time, axis=1)
     return get_address_stop_time(df_sorted, 18)
+
+print(load_and_process_dataframe("history.csv"))
 
