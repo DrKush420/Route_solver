@@ -87,5 +87,5 @@ def load_and_process_dataframe(file_path):
     df_sorted['stop_time'] = df_sorted.apply(get_stop_time, axis=1)
     return get_address_stop_time(df_sorted, 18)
 
-print(load_and_process_dataframe("history.csv"))
+# print(load_and_process_dataframe("history.csv"))
 
