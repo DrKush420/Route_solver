@@ -10,7 +10,8 @@ from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 from adress_api import adressapi
 import pdb;
 import numpy as np
-
+import pandas as pd
+import os
 
 
 class Depot:
@@ -97,7 +98,7 @@ class RouteOptimizer:
         all_locations = [depot.coordinates for depot in self.depots] + [res.coordinates for res in self.reservations]
         #print(all_locations)
         self.time_matrix= np.ceil(np.array(self.api.get_travel_times(all_locations))/60).astype(int)
-        #print(self.time_matrix)
+        print(self.time_matrix)
 
 
     def create_data_model(self):
@@ -333,22 +334,37 @@ def main():
         Van(id=4, depot=depots[0], emissions_per_km=200, fuel_consumption_per_km=0.2, start_time=480, return_deadline=1080),
     ]
 
-    reservations = [
-        Reservation(id=1, adress="Lier , grotemarkt , belgium", stop_duration=10, time_window=(480, 600)),
-        Reservation(id=2, adress="antwerpen , grotemarkt , belgie", stop_duration=20, time_window=(540, 660)),
-        Reservation(id=3, adress="Leuven , grotemarkt , belgium", stop_duration=30, time_window=(600, 720)),
-        Reservation(id=4, adress="Gent , grotemarkt , belgium", stop_duration=40, time_window=(480, 600)),
-        Reservation(id=5, adress="Genk , grotemarkt , belgium", stop_duration=20, time_window=(540, 660)),
-        Reservation(id=6, adress="Hasselt , grotemarkt , belgium", stop_duration=25, time_window=(600, 720)),
-        Reservation(id=7, adress="brussel , grotemarkt , belgium", stop_duration=15, time_window=(700, 800)),
-        Reservation(id=8, adress="kortrijk , grotemarkt , belgium", stop_duration=20, time_window=(550, 580)),
-        Reservation(id=9, adress="Namen, grotemarkt , belgium", stop_duration=25, time_window=(900, 1080)),
-        Reservation(id=10, adress="Luik , grotemarkt , belgium", stop_duration=50, time_window=(480, 600)),
-        Reservation(id=11, adress="brugge , grtemarkt , belgium", stop_duration=20, time_window=(540, 660)),
-        Reservation(id=12, adress="oostende , grotemarkt , belgium", stop_duration=10, time_window=(600, 720)),
-        Reservation(id=13, adress="mechelen , grotemarkt , belgica", stop_duration=15, time_window=(480, 900)),
+    file_path = os.path.join("data", "history.csv")
+    df = pd.read_csv(file_path, parse_dates=["Submission Date"])
+    pd.set_option("display.max_columns", None)  # Show all columns
+    pd.set_option("display.expand_frame_repr", False)
+    print(df.columns.tolist())
+    df["Submission Date"] = pd.to_datetime(df["Submission Date"], format="%d/%m/%Y")
+    df["START UUR "] = pd.to_datetime(df["START UUR "], format="%H:%M").dt.time
 
-    ]
+    df_sorted = df.sort_values(by=["Submission Date", "START UUR "], ascending=[True, True])
+    time_window = (480,1200)
+    reservations = []
+    for res in range(len(df_sorted)):
+        stop_duration =10  #bastifunctie(veld)
+        reservations.append(Reservation(id=res, adress=df_sorted.iloc[res]["LOCATIE"], stop_duration=stop_duration, time_window=time_window))
+
+    # reservations = [
+    #     Reservation(id=1, adress="Lier , grotemarkt , belgium", stop_duration=10, time_window=(480, 600)),
+    #     Reservation(id=2, adress="antwerpen , grotemarkt , belgie", stop_duration=20, time_window=(540, 660)),
+    #     Reservation(id=3, adress="Leuven , grotemarkt , belgium", stop_duration=30, time_window=(600, 720)),
+    #     Reservation(id=4, adress="Gent , grotemarkt , belgium", stop_duration=40, time_window=(480, 600)),
+    #     Reservation(id=5, adress="Genk , grotemarkt , belgium", stop_duration=20, time_window=(540, 660)),
+    #     Reservation(id=6, adress="Hasselt , grotemarkt , belgium", stop_duration=25, time_window=(600, 720)),
+    #     Reservation(id=7, adress="brussel , grotemarkt , belgium", stop_duration=15, time_window=(700, 800)),
+    #     Reservation(id=8, adress="kortrijk , grotemarkt , belgium", stop_duration=20, time_window=(550, 580)),
+    #     Reservation(id=9, adress="Namen, grotemarkt , belgium", stop_duration=25, time_window=(900, 1080)),
+    #     Reservation(id=10, adress="Luik , grotemarkt , belgium", stop_duration=50, time_window=(480, 600)),
+    #     Reservation(id=11, adress="brugge , grtemarkt , belgium", stop_duration=20, time_window=(540, 660)),
+    #     Reservation(id=12, adress="oostende , grotemarkt , belgium", stop_duration=10, time_window=(600, 720)),
+    #     Reservation(id=13, adress="mechelen , grotemarkt , belgica", stop_duration=15, time_window=(480, 900)),
+
+    # ]
 
     optimizer = RouteOptimizer(vans, reservations,depots)
     

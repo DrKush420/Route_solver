@@ -2,5 +2,4 @@ routenv
 __pycache__/
 Routing - Copy.py
 .env
-/history.csv
-/output.csv
+data/ 
