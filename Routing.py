@@ -119,7 +119,7 @@ class RouteOptimizer:
                 if not res.coordinates:
                     print(f"Geocoding failed for reservation: {res.address}")
 
-    def generate_matrices_from_api(self):
+    def generate_time_matrix_from_api(self):
         """
         Generate time matrix using actual travel times from geocoding API.
         Stores results in self.time_matrix.
@@ -199,30 +199,22 @@ class RouteOptimizer:
 
             # Apply time window constraints for all locations
             for location_idx, (start, end) in enumerate(self.time_windows):
+                if location_idx == self.depot_index:
+                    continue
                 # Convert location index to routing model's node index
                 node_index = self.manager.NodeToIndex(location_idx)
                 time_dimension.CumulVar(node_index).SetRange(int(start), int(end))
 
             for vehicle_id, van in enumerate(self.vans):
                 start_index = self.routing.Start(vehicle_id)
-                end_index = self.routing.End(vehicle_id)
 
-                # Convert van times to model's time format
-                van_start = van.start_time - self.start_hour
-                van_deadline = van.return_deadline - self.start_hour
-
-                # Apply vehicle-specific constraints
-                time_dimension.CumulVar(start_index).SetMin(van_start)
-                time_dimension.CumulVar(end_index).SetMax(van_deadline)
-
-            # Optimization objectives
-            for vehicle_id in range(len(self.vans)):
+                time_dimension.CumulVar(start_index).SetRange(
+                    self.time_windows[0][0], self.time_windows[0][1]
+                )
                 self.routing.AddVariableMinimizedByFinalizer(
                     time_dimension.CumulVar(self.routing.Start(vehicle_id))
                 )
-                self.routing.AddVariableMinimizedByFinalizer(
-                    time_dimension.CumulVar(self.routing.End(vehicle_id))
-                )
+                self.routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(self.routing.End(vehicle_id)))
 
         except Exception as e:
             print(f"Routing initialization failed: {str(e)}")
@@ -344,7 +336,7 @@ def main():
         )
         # Configure and run optimizer
     optimizer = RouteOptimizer(vans, reservations, [depot])
-    optimizer.generate_matrices_from_api()
+    optimizer.generate_time_matrix_from_api()
     optimizer.create_data_model()
     optimizer.initialize_routing()
 
