@@ -331,7 +331,7 @@ def main():
                 id=len(reservations),
                 address=address,
                 stop_duration=int(duration),
-                time_window=(480, 1200)  # 8AM-8PM window
+                time_window=(480, 1020)  # 8AM-8PM window
             )
         )
         # Configure and run optimizer
