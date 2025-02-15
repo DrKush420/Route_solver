@@ -137,7 +137,7 @@ class RouteOptimizer:
 
         # Model Setup Methods ------------------------------------------------------
 
-    def create_data_model(self):
+    def add_time_windows_and_stop_durations_from_reservations(self):
         """Prepare time windows and service durations for OR-Tools model."""
         time_windows = []
         stop_durations = [0]  # Depot has no service time
@@ -337,7 +337,7 @@ def main():
         # Configure and run optimizer
     optimizer = RouteOptimizer(vans, reservations, [depot])
     optimizer.generate_time_matrix_from_api()
-    optimizer.create_data_model()
+    optimizer.add_time_windows_and_stop_durations_from_reservations()
     optimizer.initialize_routing()
 
     if optimizer.solve():
