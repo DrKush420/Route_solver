@@ -213,13 +213,13 @@ class RouteOptimizer:
             #     )
 
             # Optimization objectives
-            # for vehicle_id in range(len(self.vans)):
-            #     self.routing.AddVariableMinimizedByFinalizer(
-            #         time_dimension.CumulVar(self.routing.Start(vehicle_id))
-            #     )
-            #     self.routing.AddVariableMinimizedByFinalizer(
-            #         time_dimension.CumulVar(self.routing.End(vehicle_id))
-            #     )
+            for vehicle_id in range(len(self.vans)):
+                self.routing.AddVariableMinimizedByFinalizer(
+                    time_dimension.CumulVar(self.routing.Start(vehicle_id))
+                )
+                self.routing.AddVariableMinimizedByFinalizer(
+                    time_dimension.CumulVar(self.routing.End(vehicle_id))
+                )
 
         except Exception as e:
             print(f"Routing initialization failed: {str(e)}")
