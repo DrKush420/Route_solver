@@ -197,29 +197,29 @@ class RouteOptimizer:
             )
             time_dimension = self.routing.GetDimensionOrDie(time_dimension_name)
 
-            # Apply time window constraints
-            for location_idx, (start, end) in enumerate(self.time_windows):
-                if location_idx == self.depot_index:
-                    continue  # Depot handled separately
-                index = self.manager.NodeToIndex(location_idx)
-                time_dimension.CumulVar(index).SetRange(int(start), int(end))
-
-            # Apply vehicle start time constraints
-            for vehicle_id in range(len(self.vans)):
-                start_index = self.routing.Start(vehicle_id)
-                time_dimension.CumulVar(start_index).SetRange(
-                    self.time_windows[self.depot_index][0],
-                    self.time_windows[self.depot_index][1]
-                )
+            # # Apply time window constraints
+            # for location_idx, (start, end) in enumerate(self.time_windows):
+            #     if location_idx == self.depot_index:
+            #         continue  # Depot handled separately
+            #     index = self.manager.NodeToIndex(location_idx)
+            #     time_dimension.CumulVar(index).SetRange(int(start), int(end))
+            #
+            # # Apply vehicle start time constraints
+            # for vehicle_id in range(len(self.vans)):
+            #     start_index = self.routing.Start(vehicle_id)
+            #     time_dimension.CumulVar(start_index).SetRange(
+            #         self.time_windows[self.depot_index][0],
+            #         self.time_windows[self.depot_index][1]
+            #     )
 
             # Optimization objectives
-            for vehicle_id in range(len(self.vans)):
-                self.routing.AddVariableMinimizedByFinalizer(
-                    time_dimension.CumulVar(self.routing.Start(vehicle_id))
-                )
-                self.routing.AddVariableMinimizedByFinalizer(
-                    time_dimension.CumulVar(self.routing.End(vehicle_id))
-                )
+            # for vehicle_id in range(len(self.vans)):
+            #     self.routing.AddVariableMinimizedByFinalizer(
+            #         time_dimension.CumulVar(self.routing.Start(vehicle_id))
+            #     )
+            #     self.routing.AddVariableMinimizedByFinalizer(
+            #         time_dimension.CumulVar(self.routing.End(vehicle_id))
+            #     )
 
         except Exception as e:
             print(f"Routing initialization failed: {str(e)}")
@@ -236,10 +236,10 @@ class RouteOptimizer:
                 search_params.first_solution_strategy = (
                     routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
                 )
-                search_params.local_search_metaheuristic = (
-                    routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
-                )
-                search_params.time_limit.seconds = 30  # Balance quality vs speed
+                # search_params.local_search_metaheuristic = (
+                #     routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
+                # )
+                # search_params.time_limit.seconds = 300  # Balance quality vs speed
 
             self.solution = self.routing.SolveWithParameters(search_params)
             return self.solution is not None
@@ -328,6 +328,7 @@ def main():
     reservations = []
     data_path = os.path.join("data", "history.csv")
     for address, duration in load_and_process_dataframe(data_path):
+        print("adres " + address + "duration " + str(duration))
         reservations.append(
             Reservation(
                 id=len(reservations),
@@ -336,7 +337,6 @@ def main():
                 time_window=(480, 1200)  # 8AM-8PM window
             )
         )
-        print("uo")
         # Configure and run optimizer
     optimizer = RouteOptimizer(vans, reservations, [depot])
     optimizer.generate_matrices_from_api()
