@@ -401,23 +401,6 @@ def main():
         print(tup[res][1])
         reservations.append(Reservation(id=res, adress=tup[res][0], stop_duration=int(tup[res][1]), time_window=time_window))
 
-    # reservations = [
-    #     Reservation(id=1, adress="Lier , grotemarkt , belgium", stop_duration=10, time_window=(480, 600)),
-    #     Reservation(id=2, adress="antwerpen , grotemarkt , belgie", stop_duration=20, time_window=(540, 660)),
-    #     Reservation(id=3, adress="Leuven , grotemarkt , belgium", stop_duration=30, time_window=(600, 720)),
-    #     Reservation(id=4, adress="Gent , grotemarkt , belgium", stop_duration=40, time_window=(480, 600)),
-    #     Reservation(id=5, adress="Genk , grotemarkt , belgium", stop_duration=20, time_window=(540, 660)),
-    #     Reservation(id=6, adress="Hasselt , grotemarkt , belgium", stop_duration=25, time_window=(600, 720)),
-    #     Reservation(id=7, adress="brussel , grotemarkt , belgium", stop_duration=15, time_window=(700, 800)),
-    #     # Reservation(id=8, adress="kortrijk , grotemarkt , belgium", stop_duration=20, time_window=(550, 580)),
-    #     # Reservation(id=9, adress="Namen, grotemarkt , belgium", stop_duration=25, time_window=(900, 1080)),
-    #     # Reservation(id=10, adress="Luik , grotemarkt , belgium", stop_duration=50, time_window=(480, 600)),
-    #     # Reservation(id=11, adress="brugge , grtemarkt , belgium", stop_duration=20, time_window=(540, 660)),
-    #     # Reservation(id=12, adress="oostende , grotemarkt , belgium", stop_duration=10, time_window=(600, 720)),
-    #     # Reservation(id=13, adress="mechelen , grotemarkt , belgica", stop_duration=15, time_window=(480, 900)),
-
-    # ]
-
     optimizer = RouteOptimizer(vans, reservations,depots)
     
     optimizer.generate_matrices_from_api()
