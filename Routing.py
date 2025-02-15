@@ -12,6 +12,7 @@ import pdb;
 import numpy as np
 import pandas as pd
 import os
+from ingest import load_and_process_dataframe
 
 
 class Depot:
@@ -98,7 +99,9 @@ class RouteOptimizer:
         all_locations = [depot.coordinates for depot in self.depots] + [res.coordinates for res in self.reservations]
         #print(all_locations)
         self.time_matrix= np.ceil(np.array(self.api.get_travel_times(all_locations))/60).astype(int)
-        print(self.time_matrix)
+        with open("matrix.txt", "w") as file:
+            for row in self.time_matrix:
+                file.write(" ".join(map(str, row)) + "\n")
 
 
     def create_data_model(self):
@@ -189,14 +192,30 @@ class RouteOptimizer:
             time = "Time"
             routing.AddDimension(
                 transit_callback_index,
-                190,  # allow waiting time
-                100000000,  # maximum time per vehicle
+                0,  # allow waiting time
+                600,  # maximum time per vehicle
                 False,  # Don't force start cumul to zero.
                 time,
             )
             time_dimension = routing.GetDimensionOrDie(time)
             print("Time dimension added.")
 
+            #     # Add service time at each node
+            # for node in range(len(self.stop_durations)):
+            #     index = manager.NodeToIndex(node)
+            #     time_dimension.CumulVar(index).SetValue(self.stop_durations[node])
+            # print("Service time added for each node.")
+
+            # def service_time_callback(from_index):
+            #     """Returns the service time for a given node."""
+            #     from_node = manager.IndexToNode(from_index)
+            #     return self.stop_durations[from_node]
+
+            # service_callback_index = routing.RegisterUnaryTransitCallback(service_time_callback)
+            # time_dimension.SetCumulVarSoftUpperBound(service_callback_index, 0, 1)
+
+            # # Add service time as part of the travel time
+            # routing.AddTransitEvaluator(service_callback_index, time)
 
             # Add time window constraints for each location except depot.
             for location_idx, time_window in enumerate(self.time_windows):
@@ -245,7 +264,7 @@ class RouteOptimizer:
                 search_parameters = pywrapcp.DefaultRoutingSearchParameters()
                 search_parameters.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
                 search_parameters.local_search_metaheuristic = routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
-                search_parameters.time_limit.seconds = 60
+                search_parameters.time_limit.seconds = 50
 
             self.solution = self.routing.SolveWithParameters(search_parameters)
             return self.solution is not None
@@ -285,8 +304,9 @@ class RouteOptimizer:
         mins = minutes % 60
         return f"{int(hours):02d}:{int(mins):02d}"
 
+
     # [START solution_printer]
-    def print_solution(self):
+    def print_sol(self):
         """Prints solution on console."""
         print(f"Objective: {self.solution.ObjectiveValue()}")
             # Display dropped nodes.
@@ -323,31 +343,63 @@ class RouteOptimizer:
         # [END solution_printer]
 
 
+    # [START solution_printer]
+    def print_solution(self):
+        """Prints solution on console."""
+        print(f"Objective: {self.solution.ObjectiveValue()}")
+            # Display dropped nodes.
+        dropped_nodes = "Dropped nodes:"
+        for node in range(self.routing.Size()):
+            if self.routing.IsStart(node) or self.routing.IsEnd(node):
+                continue
+            if self.solution.Value(self.routing.NextVar(node)) == node:
+                dropped_nodes += f" {self.manager.IndexToNode(node)}"
+        print(dropped_nodes)
+        time_dimension = self.routing.GetDimensionOrDie("Time")
+        total_time = 0
+        for vehicle_id in range(len(self.vans)):
+            index = self.routing.Start(vehicle_id)
+            plan_output = f"Route for vehicle {vehicle_id}:\n"
+            while not self.routing.IsEnd(index):
+                time_var = time_dimension.CumulVar(index)
+        
+                plan_output += (
+                    f"{self.depots[self.manager.IndexToNode(index)].adress if self.manager.IndexToNode(index) < len(self.depots) else self.reservations[self.manager.IndexToNode(index) - len(self.depots)].adress}"
+                    f" Time({self.minutes_to_time_full((self.solution.Max(time_var)-self.stop_durations[self.manager.IndexToNode(index)]))},{self.minutes_to_time_full((self.solution.Max(time_var)))})"
+                    " -> "
+                )
+                index = self.solution.Value(self.routing.NextVar(index))
+            time_var = time_dimension.CumulVar(index)
+            plan_output += (
+                f"{self.depots[self.manager.IndexToNode(index)].adress if self.manager.IndexToNode(index) < len(self.depots) else self.reservations[self.manager.IndexToNode(index) - len(self.depots)].adress}"
+                f" Time({self.minutes_to_time_full((self.solution.Max(time_var)-self.stop_durations[self.manager.IndexToNode(index)]))},{self.minutes_to_time_full((self.solution.Max(time_var)))})\n"
+            )
+            plan_output += f"Time of the route: {self.solution.Max(time_var)}min\n"
+            print(plan_output)
+            total_time += self.solution.Min(time_var)
+        print(f"Total time of all routes: {total_time}min")
+        # [END solution_printer]
+
+
 # Example Usage
 def main():
-    depots = [Depot(id=0, adress="Havenlaan 86C,  Brussel")]#, Depot(id=1, address="Depot B")]
+    depots = [Depot(id=0, adress="Trawoollaan 1A/2 1830 Machelen")]#, Depot(id=1, address="Depot B")]
     vans = [
         Van(id=0, depot=depots[0], emissions_per_km=90, fuel_consumption_per_km=0.1, start_time=480, return_deadline=1080),
         Van(id=1, depot=depots[0], emissions_per_km=200, fuel_consumption_per_km=0.2, start_time=480, return_deadline=750),
         Van(id=2, depot=depots[0], emissions_per_km=200, fuel_consumption_per_km=0.2, start_time=480, return_deadline=1080),
         Van(id=3, depot=depots[0], emissions_per_km=200, fuel_consumption_per_km=0.2, start_time=480, return_deadline=1080),
         Van(id=4, depot=depots[0], emissions_per_km=200, fuel_consumption_per_km=0.2, start_time=480, return_deadline=1080),
+        Van(id=5, depot=depots[0], emissions_per_km=200, fuel_consumption_per_km=0.2, start_time=480, return_deadline=1080),
     ]
 
     file_path = os.path.join("data", "history.csv")
-    df = pd.read_csv(file_path, parse_dates=["Submission Date"])
-    pd.set_option("display.max_columns", None)  # Show all columns
-    pd.set_option("display.expand_frame_repr", False)
-    print(df.columns.tolist())
-    df["Submission Date"] = pd.to_datetime(df["Submission Date"], format="%d/%m/%Y")
-    df["START UUR "] = pd.to_datetime(df["START UUR "], format="%H:%M").dt.time
-
-    df_sorted = df.sort_values(by=["Submission Date", "START UUR "], ascending=[True, True])
     time_window = (480,1200)
     reservations = []
-    for res in range(len(df_sorted)):
-        stop_duration =10  #bastifunctie(veld)
-        reservations.append(Reservation(id=res, adress=df_sorted.iloc[res]["LOCATIE"], stop_duration=stop_duration, time_window=time_window))
+    tup= load_and_process_dataframe(file_path)
+    for res in range(len(tup)):
+        print(tup[res][1])
+        reservations.append(Reservation(id=res, adress=tup[res][0], stop_duration=int(tup[res][1]), time_window=time_window))
 
     # reservations = [
     #     Reservation(id=1, adress="Lier , grotemarkt , belgium", stop_duration=10, time_window=(480, 600)),
@@ -357,12 +409,12 @@ def main():
     #     Reservation(id=5, adress="Genk , grotemarkt , belgium", stop_duration=20, time_window=(540, 660)),
     #     Reservation(id=6, adress="Hasselt , grotemarkt , belgium", stop_duration=25, time_window=(600, 720)),
     #     Reservation(id=7, adress="brussel , grotemarkt , belgium", stop_duration=15, time_window=(700, 800)),
-    #     Reservation(id=8, adress="kortrijk , grotemarkt , belgium", stop_duration=20, time_window=(550, 580)),
-    #     Reservation(id=9, adress="Namen, grotemarkt , belgium", stop_duration=25, time_window=(900, 1080)),
-    #     Reservation(id=10, adress="Luik , grotemarkt , belgium", stop_duration=50, time_window=(480, 600)),
-    #     Reservation(id=11, adress="brugge , grtemarkt , belgium", stop_duration=20, time_window=(540, 660)),
-    #     Reservation(id=12, adress="oostende , grotemarkt , belgium", stop_duration=10, time_window=(600, 720)),
-    #     Reservation(id=13, adress="mechelen , grotemarkt , belgica", stop_duration=15, time_window=(480, 900)),
+    #     # Reservation(id=8, adress="kortrijk , grotemarkt , belgium", stop_duration=20, time_window=(550, 580)),
+    #     # Reservation(id=9, adress="Namen, grotemarkt , belgium", stop_duration=25, time_window=(900, 1080)),
+    #     # Reservation(id=10, adress="Luik , grotemarkt , belgium", stop_duration=50, time_window=(480, 600)),
+    #     # Reservation(id=11, adress="brugge , grtemarkt , belgium", stop_duration=20, time_window=(540, 660)),
+    #     # Reservation(id=12, adress="oostende , grotemarkt , belgium", stop_duration=10, time_window=(600, 720)),
+    #     # Reservation(id=13, adress="mechelen , grotemarkt , belgica", stop_duration=15, time_window=(480, 900)),
 
     # ]
 
@@ -378,8 +430,8 @@ def main():
     else:
         print("No solution found.")
     
-    optimizer.get_recommendation(Reservation(id=14, adress="Halle , grotemarkt , belgium", stop_duration=15, time_window=(480, 1400)))
-    optimizer.print_solution()
+    #optimizer.get_recommendation(Reservation(id=14, adress="Halle , grotemarkt , belgium", stop_duration=15, time_window=(480, 1400)))
+    #optimizer.print_solution()
 
 
 if __name__ == "__main__":
