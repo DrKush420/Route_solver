@@ -197,20 +197,23 @@ class RouteOptimizer:
             )
             time_dimension = self.routing.GetDimensionOrDie(time_dimension_name)
 
-            # # Apply time window constraints
-            # for location_idx, (start, end) in enumerate(self.time_windows):
-            #     if location_idx == self.depot_index:
-            #         continue  # Depot handled separately
-            #     index = self.manager.NodeToIndex(location_idx)
-            #     time_dimension.CumulVar(index).SetRange(int(start), int(end))
-            #
-            # # Apply vehicle start time constraints
-            # for vehicle_id in range(len(self.vans)):
-            #     start_index = self.routing.Start(vehicle_id)
-            #     time_dimension.CumulVar(start_index).SetRange(
-            #         self.time_windows[self.depot_index][0],
-            #         self.time_windows[self.depot_index][1]
-            #     )
+            # Apply time window constraints for all locations
+            for location_idx, (start, end) in enumerate(self.time_windows):
+                # Convert location index to routing model's node index
+                node_index = self.manager.NodeToIndex(location_idx)
+                time_dimension.CumulVar(node_index).SetRange(int(start), int(end))
+
+            for vehicle_id, van in enumerate(self.vans):
+                start_index = self.routing.Start(vehicle_id)
+                end_index = self.routing.End(vehicle_id)
+
+                # Convert van times to model's time format
+                van_start = van.start_time - self.start_hour
+                van_deadline = van.return_deadline - self.start_hour
+
+                # Apply vehicle-specific constraints
+                time_dimension.CumulVar(start_index).SetMin(van_start)
+                time_dimension.CumulVar(end_index).SetMax(van_deadline)
 
             # Optimization objectives
             for vehicle_id in range(len(self.vans)):
@@ -236,10 +239,10 @@ class RouteOptimizer:
                 search_params.first_solution_strategy = (
                     routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
                 )
-                # search_params.local_search_metaheuristic = (
-                #     routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
-                # )
-                # search_params.time_limit.seconds = 300  # Balance quality vs speed
+                search_params.local_search_metaheuristic = (
+                    routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
+                )
+                search_params.time_limit.seconds = 100  # Balance quality vs speed
 
             self.solution = self.routing.SolveWithParameters(search_params)
             return self.solution is not None
@@ -321,7 +324,9 @@ def main():
     vans = [
         Van(id=0, depot=depot),
         Van(id=1, depot=depot),
-        # ... additional vehicles
+        Van(id=2, depot=depot),
+        Van(id=3, depot=depot),
+        Van(id=4, depot=depot),
     ]
 
     # Load reservations from data file
