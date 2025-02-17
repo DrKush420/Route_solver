@@ -197,24 +197,25 @@ class RouteOptimizer:
             )
             time_dimension = self.routing.GetDimensionOrDie(time_dimension_name)
 
-            # Apply time window constraints for all locations
+            # Apply time window constraints for all locations except depot
             for location_idx, (start, end) in enumerate(self.time_windows):
-                if location_idx == self.depot_index:
-                    continue
+                # if location_idx == self.depot_index:
+                #     continue
                 # Convert location index to routing model's node index
                 node_index = self.manager.NodeToIndex(location_idx)
                 time_dimension.CumulVar(node_index).SetRange(int(start), int(end))
 
+            # Apply time window constraints for all vehicles
             for vehicle_id, van in enumerate(self.vans):
                 start_index = self.routing.Start(vehicle_id)
+                end_index = self.routing.End(vehicle_id)
 
                 time_dimension.CumulVar(start_index).SetRange(
                     self.time_windows[0][0], self.time_windows[0][1]
                 )
-                self.routing.AddVariableMinimizedByFinalizer(
-                    time_dimension.CumulVar(self.routing.Start(vehicle_id))
-                )
-                self.routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(self.routing.End(vehicle_id)))
+
+                self.routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(start_index))
+                self.routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(end_index))
 
         except Exception as e:
             print(f"Routing initialization failed: {str(e)}")
@@ -309,7 +310,7 @@ def main():
         id=0,
         address="Trawoollaan 1A/2 1830 Machelen",
         start_time=480,  # 8:00 AM
-        return_deadline=1080  # 6:00 PM
+        return_deadline=500  # 6:00 PM
     )
 
     # Create vehicle fleet
