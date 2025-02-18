@@ -175,7 +175,7 @@ class RouteOptimizer:
                 len(self.vans),
                 [van.depot.index for van in self.vans],  # index of start location
                 [van.depot.index for van in self.vans]   # index of stopping location     
-            )  #IMPORTANT WILL BREAK IF ID ARE NOT EQUAL TO INDEX
+            )  
 
             # Create routing model instance
             self.routing = pywrapcp.RoutingModel(self.manager)
