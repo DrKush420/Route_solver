@@ -128,8 +128,8 @@ class RouteOptimizer:
 
         # Combine all locations: depots first, then reservations
         all_locations = [d.coordinates for d in self.depots]
-        for i in range(self.depots):
-            self.depots.index=i
+        for i in range(len(self.depots)):
+            self.depots[i].index=i
         all_locations += [r.coordinates for r in self.reservations]
 
         # Get travel times in minutes from API
@@ -206,8 +206,8 @@ class RouteOptimizer:
 
             # Apply time window constraints for all locations except depot
             for location_idx, (start, end) in enumerate(self.time_windows):
-                # if location_idx == self.depot_index:
-                #     continue
+                if location_idx < len(self.depots):
+                    continue
                 # Convert location index to routing model's node index
                 node_index = self.manager.NodeToIndex(location_idx)
                 time_dimension.CumulVar(node_index).SetRange(int(start), int(end))
@@ -224,8 +224,8 @@ class RouteOptimizer:
                 self.routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(start_index))
                 self.routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(end_index))
             
-            # penalty = 100000000
-            # for node in range(1, len(self.time_windows)):
+            # penalty = 100000000   
+            # for node in range(len(self.depots), len(self.time_windows)):
             #     routing.AddDisjunction([manager.NodeToIndex(node)], penalty)
 
             # print("Disjunctions added.")
