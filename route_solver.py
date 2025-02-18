@@ -140,7 +140,7 @@ class RouteOptimizer:
     def add_time_windows_and_stop_durations_from_reservations(self):
         """Prepare time windows and service durations for OR-Tools model."""
         time_windows = []
-        stop_durations = [0]  # Depot has no service time
+        stop_durations =  [0 for _ in range(len(self.depots))]  # Depot has no service time
 
         # Add depot time window (converted to relative time)
         depot_window = (
@@ -216,6 +216,12 @@ class RouteOptimizer:
 
                 self.routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(start_index))
                 self.routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(end_index))
+            
+            # penalty = 100000000
+            # for node in range(1, len(self.time_windows)):
+            #     routing.AddDisjunction([manager.NodeToIndex(node)], penalty)
+
+            # print("Disjunctions added.")
 
         except Exception as e:
             print(f"Routing initialization failed: {str(e)}")
@@ -235,7 +241,7 @@ class RouteOptimizer:
                 search_params.local_search_metaheuristic = (
                     routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
                 )
-                search_params.time_limit.seconds = 100  # Balance quality vs speed
+                search_params.time_limit.seconds = 5  # Balance quality vs speed
 
             self.solution = self.routing.SolveWithParameters(search_params)
             return self.solution is not None
@@ -244,48 +250,45 @@ class RouteOptimizer:
             print(f"Solving failed: {str(e)}")
             return False
 
-    def print_solution(self):
-        """Format and print the optimized routes with timing information."""
-        if not self.solution:
-            print("No solution to print")
-            return
 
+    # [START solution_printer]
+    def print_solution(self):
+        """Prints solution on console."""
+        print(f"Objective: {self.solution.ObjectiveValue()}")
+            # Display dropped nodes.
+        dropped_nodes = "Dropped nodes:"
+        for node in range(self.routing.Size()):
+            if self.routing.IsStart(node) or self.routing.IsEnd(node):
+                continue
+            if self.solution.Value(self.routing.NextVar(node)) == node:
+                dropped_nodes += f" {self.manager.IndexToNode(node)}"
+        print(dropped_nodes)
         time_dimension = self.routing.GetDimensionOrDie("Time")
         total_time = 0
-
         for vehicle_id in range(len(self.vans)):
             index = self.routing.Start(vehicle_id)
-            route = []
-
+            plan_output = f"Route for vehicle {vehicle_id}:\n"
             while not self.routing.IsEnd(index):
-                node = self.manager.IndexToNode(index)
                 time_var = time_dimension.CumulVar(index)
-
-                # Format arrival and departure times
-                arrival = self._minutes_to_time(self.solution.Min(time_var))
-                departure = self._minutes_to_time(self.solution.Max(time_var))
-                address = self._get_location_address(node)
-
-                route.append(
-                    f"{address} (Arrive: {arrival}, Depart: {departure})"
+        
+                plan_output += (
+                    f"{self._get_location_address(self.manager.IndexToNode(index))}"
+                    f" Time({self._minutes_to_time((self.solution.Max(time_var)-self.stop_durations[self.manager.IndexToNode(index)]))},{self._minutes_to_time((self.solution.Max(time_var)))})"
+                    " -> "
                 )
                 index = self.solution.Value(self.routing.NextVar(index))
-
-            # Add final depot node
-            node = self.manager.IndexToNode(index)
             time_var = time_dimension.CumulVar(index)
-            total_time += self.solution.Min(time_var)
-            route.append(
-                f"{self._get_location_address(node)}"
-                f" (Arrive: {self._minutes_to_time(self.solution.Min(time_var))})"
+            plan_output += (
+                f"{self._get_location_address(self.manager.IndexToNode(index))}"
+                f" Time({self._minutes_to_time((self.solution.Max(time_var)-self.stop_durations[self.manager.IndexToNode(index)]))},{self._minutes_to_time((self.solution.Max(time_var)))})\n"
             )
+            plan_output += f"Time of the route: {self.solution.Max(time_var)}min\n"
+            print(plan_output)
+            total_time += self.solution.Min(time_var)
+        print(f"Total time of all routes: {total_time}min")
+        # [END solution_printer]
 
-            # Print formatted route
-            print(f"\nVehicle {vehicle_id} Route:")
-            print("\n -> ".join(route))
-            print(f"Total Route Time: {self.solution.Min(time_var)} minutes\n")
 
-        print(f"Combined Total Time: {total_time} minutes")
 
     # Helper Methods -----------------------------------------------------------
 
@@ -310,7 +313,7 @@ def main():
         id=0,
         address="Trawoollaan 1A/2 1830 Machelen",
         start_time=480,  # 8:00 AM
-        return_deadline=500  # 6:00 PM
+        return_deadline=1080  
     )
 
     # Create vehicle fleet
@@ -320,13 +323,14 @@ def main():
         Van(id=2, depot=depot),
         Van(id=3, depot=depot),
         Van(id=4, depot=depot),
+        Van(id=5, depot=depot),
     ]
 
     # Load reservations from data file
     reservations = []
     data_path = os.path.join("data", "history.csv")
     for address, duration in load_and_process_dataframe(data_path):
-        print("adres " + address + "duration " + str(duration))
+        print(" adres " + address + " duration " + str(duration))
         reservations.append(
             Reservation(
                 id=len(reservations),
