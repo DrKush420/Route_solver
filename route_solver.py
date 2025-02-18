@@ -61,6 +61,7 @@ class Reservation:
 
     def __init__(self, id, address, stop_duration, time_window=None, priority=0, coordinates=None):
         self.id = id
+        self.index=None
         self.address = address
         self.stop_duration = stop_duration
         self.time_window = time_window or (0, 1440)  # Default: Full day window
@@ -97,7 +98,6 @@ class RouteOptimizer:
         self.manager = None  # OR-Tools index manager
         self.routing = None  # OR-Tools routing model
         self.solution = None  # Computed solution
-        self.depot_index = 0  # Currently only supports single depot
         self.start_hour = 480  # Default start time (8:00 AM in minutes)
         self.api = adressapi()  # Geocoding API client
 
@@ -128,6 +128,8 @@ class RouteOptimizer:
 
         # Combine all locations: depots first, then reservations
         all_locations = [d.coordinates for d in self.depots]
+        for i in range(self.depots):
+            self.depots.index=i
         all_locations += [r.coordinates for r in self.reservations]
 
         # Get travel times in minutes from API
@@ -143,11 +145,12 @@ class RouteOptimizer:
         stop_durations =  [0 for _ in range(len(self.depots))]  # Depot has no service time
 
         # Add depot time window (converted to relative time)
-        depot_window = (
-            self.depots[0].start_time - self.start_hour,
-            self.depots[0].return_deadline - self.start_hour
-        )
-        time_windows.append(depot_window)
+        for dep in self.depots:
+            depot_window = (
+            dep.start_time - self.start_hour,
+            dep.return_deadline - self.start_hour
+            )
+            time_windows.append(depot_window)
 
         # Add reservation time windows and service durations
         for res in self.reservations:
@@ -160,6 +163,9 @@ class RouteOptimizer:
         self.time_windows = time_windows
         self.stop_durations = stop_durations
 
+
+
+
     def initialize_routing(self):
         """Configure OR-Tools routing model with constraints."""
         try:
@@ -167,8 +173,9 @@ class RouteOptimizer:
             self.manager = pywrapcp.RoutingIndexManager(
                 len(self.time_matrix),
                 len(self.vans),
-                self.depot_index
-            )
+                [van.depot.index for van in self.vans],  # index of start location
+                [van.depot.index for van in self.vans]   # index of stopping location     
+            )  #IMPORTANT WILL BREAK IF ID ARE NOT EQUAL TO INDEX
 
             # Create routing model instance
             self.routing = pywrapcp.RoutingModel(self.manager)
@@ -309,21 +316,28 @@ class RouteOptimizer:
 def main():
     """Example problem setup and execution."""
     # Configure depot
-    depot = Depot(
+    depot = [Depot(
         id=0,
         address="Trawoollaan 1A/2 1830 Machelen",
         start_time=480,  # 8:00 AM
         return_deadline=1080  
-    )
+    ),
+    Depot(
+        id=1,
+        address="Grote markt , Lier, belgie",
+        start_time=480,  # 8:00 AM
+        return_deadline=1080  
+    )]
 
     # Create vehicle fleet
     vans = [
-        Van(id=0, depot=depot),
-        Van(id=1, depot=depot),
-        Van(id=2, depot=depot),
-        Van(id=3, depot=depot),
-        Van(id=4, depot=depot),
-        Van(id=5, depot=depot),
+        Van(id=0, depot=depot[0]),
+        Van(id=1, depot=depot[0]),
+        Van(id=2, depot=depot[0]),
+        Van(id=3, depot=depot[0]),
+        Van(id=4, depot=depot[0]),
+        Van(id=5, depot=depot[0]),
+        Van(id=6, depot=depot[1]),
     ]
 
     # Load reservations from data file
@@ -340,7 +354,7 @@ def main():
             )
         )
         # Configure and run optimizer
-    optimizer = RouteOptimizer(vans, reservations, [depot])
+    optimizer = RouteOptimizer(vans, reservations, depot)
     optimizer.generate_time_matrix_from_api()
     optimizer.add_time_windows_and_stop_durations_from_reservations()
     optimizer.initialize_routing()
