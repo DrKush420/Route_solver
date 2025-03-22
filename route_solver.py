@@ -109,6 +109,7 @@ class RouteOptimizer:
         for depot in self.depots:
             if not depot.coordinates:
                 depot.coordinates = self.api.get_coordinates(depot.address)
+               
                 if not depot.coordinates:
                     print(f"Geocoding failed for depot: {depot.address}")
 
@@ -256,6 +257,7 @@ class RouteOptimizer:
         except Exception as e:
             print(f"Solving failed: {str(e)}")
             return False
+        
 
 
     # [START solution_printer]
@@ -310,8 +312,95 @@ class RouteOptimizer:
             return self.depots[node_index].address
         return self.reservations[node_index - len(self.depots)].address
 
+    def _get_coord_adress(self, node_index):
+        """Resolve node index to physical address."""
+        if node_index < len(self.depots):
+            return [self.depots[node_index].coordinates[1],self.depots[node_index].coordinates[0]]
+        return [self.reservations[node_index - len(self.depots)].coordinates[1] , self.reservations[node_index - len(self.depots)].coordinates[0]]
+    
+    def get_routes(self):
+        routes = []
+        for vehicle_id in range(self.routing.vehicles()):
+            index = self.routing.Start(vehicle_id)
+            route = []
+            while not self.routing.IsEnd(index):
+                node_index = self.manager.IndexToNode(index)
+                route.append(self._get_coord_adress(node_index))
+                index = self.solution.Value(self.routing.NextVar(index))
+            if node_index==self.manager.IndexToNode(index): #skips empty routes
+                continue
+            node_index = self.manager.IndexToNode(index)
+            route.append(self._get_coord_adress(node_index))
+            routes.append(route)
+
+        return routes
+
+
+
+def test():
+    depot = [Depot(
+        id=0,
+        address="Trawoollaan 1A/2 1830 Machelen",
+        start_time=480,  # 8:00 AM
+        return_deadline=1080  
+    ),
+    Depot(
+        id=1,
+        address="Grote markt , Lier, belgie",
+        start_time=480,  # 8:00 AM
+        return_deadline=1080  
+    )]
+
+    # Create vehicle fleet
+    vans = [
+        Van(id=0, depot=depot[0]),
+        Van(id=1, depot=depot[0]),
+        Van(id=2, depot=depot[0]),
+        Van(id=3, depot=depot[0]),
+        Van(id=4, depot=depot[0]),
+        Van(id=5, depot=depot[0]),
+        Van(id=6, depot=depot[1]),
+    ]
+
+    # Load reservations from data file
+    reservations = []
+    data_path = os.path.join("data", "history.csv")
+    for address, duration in load_and_process_dataframe(data_path):
+        print(" adres " + address + " duration " + str(duration))
+        reservations.append(
+            Reservation(
+                id=len(reservations),
+                address=address,
+                stop_duration=int(duration),
+                time_window=(480, 1020)  # 8AM-8PM window
+            )
+        )
+        # Configure and run optimizer
+    optimizer = RouteOptimizer(vans, reservations, depot)
+    optimizer.generate_time_matrix_from_api()
+    optimizer.add_time_windows_and_stop_durations_from_reservations()
+    optimizer.initialize_routing()
+    optimizer.solve()
+    return optimizer
+
 
 # Example Usage ----------------------------------------------------------------
+
+def format_routes_for_json(routes):
+    """Format routes into JSON serializable structure."""
+    formatted_routes = []
+    for i, route in enumerate(routes):
+        route_dict = {
+            "name": f"Route {i + 1}",
+            "coordinates": route
+        }
+        formatted_routes.append(route_dict)
+    return formatted_routes
+
+def get_routes():
+    """Get vehicle routes from a solution and convert to a list of routes."""
+    routes=test()
+    return format_routes_for_json(routes.get_routes())
 
 def main():
     """Example problem setup and execution."""

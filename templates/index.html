@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Routes Map</title>
+
+    <!-- Include Leaflet CSS for map styling -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+
+    <!-- Include Leaflet Routing Machine CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.css"/>
+
+    <style>
+        body {
+            font-family: 'Helvetica Neue', sans-serif;
+            background-color: #f7f7f7;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        h1 {
+            font-size: 2.5rem;
+            margin-top: 20px;
+            color: #444;
+            text-align: center;
+        }
+        .container {
+            max-width: 1200px;
+            width: 100%;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0px 0px 20px rgba(0, 0, 0, 0.1);
+            margin: 20px;
+        }
+        button {
+            background-color: grey;
+            color: white;
+            font-size: 1rem;
+            border: none;
+            padding: 10px 20px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            box-shadow: 0px 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        button:hover {
+            background-color: rgba(128, 128, 128, 0.667);
+        }
+        #map {
+            height: 400px;
+            width: 100%;
+            border-radius: 10px;
+        }
+        .legend {
+            margin-top: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            width: 100%;
+            font-size: 1rem;
+        }
+        .legend p {
+            margin: 5px 10px;
+            font-weight: 500;
+        }
+        @media (max-width: 768px) {
+            h1 { font-size: 2rem; }
+            .container { padding: 15px; }
+            button { font-size: 0.9rem; padding: 8px 18px; }
+            .legend { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Interactive Routes Map</h1>
+        <button onclick="loadRoutes()">Load Routes</button>
+        <div id="map"></div>
+        <div class="legend" id="legend"></div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
+    <script>
+        var map = L.map('map').setView([50.8503, 4.3517], 7);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        function loadRoutes() {
+            fetch('/get_routes')
+                .then(response => response.json())
+                .then(data => {
+                    if (data && Array.isArray(data.routes)) {
+                        console.log('Received Routes:', data);
+                        var legendHtml = '';
+                        var allBounds = L.latLngBounds(); // Create bounds to encompass all routes
+
+                        data.routes.forEach((route, index) => {
+                            var color = getRandomColor();
+                            var waypoints = route.coordinates.map(coord => L.latLng(coord[0], coord[1]));
+
+                            // Add route to map
+                            L.Routing.control({
+                                waypoints: waypoints,
+                                routeWhileDragging: false,
+                                createMarker: function() { return null; },
+                                lineOptions: {
+                                    styles: [{ color: color, weight: 5, opacity: 1 }]
+                                },
+                                show: false, // Hides the directions list
+                                fitSelectedRoutes: false // Prevent auto-zoom per route
+                            }).addTo(map);
+
+                            // Extend bounds with all waypoints of this route
+                            waypoints.forEach(waypoint => allBounds.extend(waypoint));
+
+                            legendHtml += `<p style="color:${color};">Route ${index + 1}</p>`;
+                        });
+
+                        // Update legend
+                        document.getElementById('legend').innerHTML = legendHtml;
+
+                        // Fit map to show all routes
+                        if (allBounds.isValid()) {
+                            map.fitBounds(allBounds, { padding: [50, 50] });
+                        }
+                    } else {
+                        console.error('Error: Expected data.routes to be an array', data);
+                    }
+                })
+                .catch(error => console.error('Error loading routes:', error));
+        }
+
+        function getRandomColor() {
+            var letters = '0123456789ABCDEF';
+            var color = '#';
+            for (var i = 0; i < 6; i++) {
+                color += letters[Math.floor(Math.random() * 16)];
+            }
+            return color;
+        }
+    </script>
+</body>
+</html>
