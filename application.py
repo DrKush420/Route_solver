@@ -1,9 +1,9 @@
 from flask import Flask, jsonify, render_template
 from route_solver import get_routes  # Import the function from route_solver.py
 
-app = Flask(__name__)
+application = Flask(__name__)
 
-@app.route('/')
+@application.route('/')
 def index():
     # Serve the map page (index.html)
     return render_template('index.html')
@@ -16,7 +16,7 @@ def index():
 #     # Return the JSON response
 #     return jsonify({"routes": routes})
 
-@app.route('/get_routes')
+@application.route('/get_routes')
 def get_routes_api():
     # Call the get_routes function and return the data as JSON
     routes = get_routes()  # Get routes from the imported function
@@ -24,4 +24,4 @@ def get_routes_api():
     return jsonify({"routes": routes})  # Return routes as JSON
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    application.run(debug=True)
